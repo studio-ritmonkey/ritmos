@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>studio ritMOnkey v14.2</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --container-bg: #1e1e1e;
+            --accent-color: #00c853;
+            --call-color: #0051ff;
+            --res-color: #ff9800;
+            --border-color: #333;
+        }
+
+        body {
+            margin: 0;
+            padding: 10px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-color);
+            color: #eee;
+            display: flex;
+            justify-content: center;
+        }
+
+        .rmp-wrapper { width: 100%; max-width: 900px; }
+        .container { 
+            background: var(--container-bg); 
+            padding: 20px; 
+            border-radius: 16px; 
+            border: 1px solid var(--border-color); 
+            box-sizing: border-box; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        /* ステータスバー（①-1対応） */
+        #status { 
+            font-size: 1.8rem; 
+            font-weight: 900; 
+            margin-bottom: 15px; 
+            padding: 15px; 
+            border-radius: 10px; 
+            text-align: center; 
+            min-height: 40px; 
+            transition: background 0.2s;
+        }
+        .mode-call { background: var(--call-color); color: white; } 
+        .mode-response { background: var(--res-color); color: #000; }
+        .mode-answer { background: var(--accent-color); color: white; } 
+        .mode-rest { background: #444; color: #888; }
+        .mode-listen { background: #673ab7; color: white; }
+
+        .display-area { display: flex; flex-direction: column; gap: 12px; }
+        .row-label { font-weight: bold; font-size: 1rem; display: flex; align-items: center; justify-content: space-between; padding: 0 5px; }
+        .note-text { color: #aaa; font-size: 0.8rem; font-weight: normal; }
+        
+        .grid { 
+            display: flex !important; 
+            flex-wrap: wrap; 
+            gap: 8px; 
+            justify-content: flex-start; 
+            min-height: 85px; 
+            background: #181818; 
+            padding: 15px 12px; 
+            border-radius: 10px; 
+            border: 1px solid #252525; 
+            align-items: center; 
+        }
+        
+        .bar-break { display: none; flex-basis: 100%; height: 0; }
+        .bar-line { width: 4px; height: 60px; background: #444; margin: 0 6px; border-radius: 2px; flex-shrink: 0; }
+
+        /* ビートボックス & アンダーバー */
+        .beat-box { 
+            width: 80px; height: 60px; padding: 6px; background: #222; border-radius: 8px; border: 2px solid #333; 
+            display: flex !important; flex-direction: column; justify-content: space-between; box-sizing: border-box; flex-shrink: 0;
+        }
+        .beat-box.active { border-color: #fff; background: #2a2a2a; transform: translateY(-2px); transition: transform 0.1s; }
+
+        .sub-grid { display: flex !important; justify-content: center; align-items: center; gap: 3px; height: 24px; }
+        .cell { width: 14px; height: 14px; border-radius: 3px; background: #333; }
+        .cell.on { background: #fff; box-shadow: 0 0 8px #fff; }
+        .invisible-notes .cell.on { background: #333; box-shadow: none; }
+
+        .under-bars { display: flex; justify-content: center; gap: 3px; padding-bottom: 2px; }
+        .u-line { height: 4px; background: #2a2a2a; border-radius: 2px; flex: 1; max-width: 14px; }
+
+        /* コントロール周り */
+        .controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 20px; }
+        .control-group { background: #252525; padding: 10px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; }
+        label { font-size: 0.7rem; color: #888; margin-bottom: 6px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+        select, input { 
+            width: 100%; padding: 8px; background: #111; border: 1px solid #444; color: white; 
+            border-radius: 5px; font-size: 0.9rem; outline: none; box-sizing: border-box;
+        }
+        select:focus { border-color: var(--accent-color); }
+        
+        #bpm { width: 65px; text-align: center; font-weight: bold; font-size: 1.1rem; }
+        .tempo-row { display: flex; align-items: center; gap: 10px; }
+        .click-label { font-size: 0.75rem; color: #eee; cursor: pointer; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+
+        #pattern-select { min-width: 100px; }
+
+        #startBtn { 
+            grid-column: span 4; padding: 20px; font-size: 1.4rem; font-weight: 900; 
+            background: var(--accent-color); border: none; color: white; border-radius: 10px; 
+            cursor: pointer; margin-top: 10px; transition: all 0.2s;
+        }
+        #startBtn:active { transform: scale(0.98); }
+        #startBtn.stop { background: #ff1744; }
+
+        @media (max-width: 850px) {
+            .bar-break { display: block; }
+            .bar-line { display: none; }
+        }
+
+        @media (max-width: 600px) {
+            .controls { grid-template-columns: repeat(2, 1fr); }
+            .control-group.full-mobile { grid-column: span 2; }
+            .beat-box { width: 72px; }
+        }
+
+        .credit-footer { text-align: center; margin-top: 30px; color: #444; font-size: 0.8rem; font-weight: bold; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
+
+<div class="rmp-wrapper">
+    <div class="container">
+        <div id="status" class="mode-rest">READY</div>
+        
+        <div class="display-area">
+            <div>
+                <div class="row-label">
+                    <span>CALL【聴く】</span>
+                    <span id="label-call-note" class="note-text"></span>
+                </div>
+                <div id="grid-call" class="grid"></div>
+            </div>
+            <div>
+                <div class="row-label">
+                    <span>RESPONSE【あなた】</span>
+                    <span id="label-ans-note" class="note-text"></span>
+                </div>
+                <div id="grid-res" class="grid"></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="control-group full-mobile" style="grid-column: span 2;">
+                <label>TRAINING MODE</label>
+                <select id="train-mode">
+                    <option value="listen-only" selected>LISTEN ONLY</option>
+                    <option value="learn-all">LEARN (Show All)</option>
+                    <option value="learn-step">LEARN (Hidden Answer)</option>
+                    <option value="try-step">TRY (Step by Step)</option>
+                    <option value="try-hard">TRY (HARD)</option>
+                </select>
+            </div>
+            <div class="control-group full-mobile" style="grid-column: span 2;">
+                <label>TEMPO & CLICK</label>
+                <div class="tempo-row">
+                    <input type="number" id="bpm" value="90">
+                    <label class="click-label"><input type="checkbox" id="guide-click" checked> ON</label>
+                </div>
+            </div>
+            <div class="control-group">
+                <label>RULE</label>
+                <select id="conv-rule">
+                    <option value="16to3">16分音符→3連符</option>
+                    <option value="3to16">3連符→16分音符</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>BEATS</label>
+                <select id="beats-num">
+                    <option value="1">1beat (Rest)</option>
+                    <option value="2">2beat (Rest)</option>
+                    <option value="3">3beat</option>
+                    <option value="4" selected>4beat</option>
+                    <option value="6-rep">3b 2Bar (Rep)</option>
+                    <option value="6-diff">3b 2Bar (Dif)</option>
+                    <option value="8-rep">4b 2Bar (Rep)</option>
+                    <option value="8-diff">4b 2Bar (Dif)</option>
+                </select>
+            </div>
+            <div class="control-group" style="grid-column: span 2;">
+                <label>PATTERN / FORM</label>
+                <select id="pattern-select"></select>
+            </div>
+            <button id="startBtn">START SESSION</button>
+        </div>
+        <div class="credit-footer">studio ritMOnkey by ARTHAND</div>
+    </div>
+</div>
+
+<script>
+(function() {
+    let audioCtx = null, isPlaying = false, nextNoteTime = 0, currentBeat = 0, cyclePhase = 'CALL', timerID = null;
+    let patterns = { a:[], b:[], c:[], d:[], e:[], f:[], g:[], h:[] };
+    let activeScheme = [];
+
+    function getSafeBPM() {
+        let val = parseInt(document.getElementById('bpm').value);
+        return isNaN(val) ? 90 : Math.max(40, Math.min(250, val));
+    }
+
+    // フォーム選択肢の定義
+    const FORM_OPTIONS = {
+        1: [{ l: "Easy", v: "a" }], 
+        2: [{ l: "Easy", v: "aa" }, { l: "Normal", v: "ab" }],
+        3: [{ l: "Normal", v: "group3-1" }, { l: "Hard", v: "abc" }],
+        4: [{ l: "Easy", v: "group4-merged" }, { l: "Normal", v: "abcd" }, { l: "Hard", v: "rand-all" }],
+        "6-rep": [{ l: "Normal", v: "group3-1" }, { l: "Hard", v: "abc" }],
+        "6-diff": [{ l: "Hard", v: "group3-1" }, { l: "VeryHard", v: "abc" }],
+        "8-rep": [{ l: "Normal", v: "group4-merged" }, { l: "Hard", v: "abcd" }, { l: "VeryHard", v: "rand-all" }],
+        "8-diff": [{ l: "Hard", v: "group4-merged" }, { l: "VeryHard", v: "abcd" }, { l: "Expert", v: "rand-all" }]
+    };
+
+    function updateFormOptions() {
+        const bSet = document.getElementById('beats-num').value;
+        const select = document.getElementById('pattern-select');
+        if(!select) return;
+        select.innerHTML = '';
+        const opts = FORM_OPTIONS[bSet] || FORM_OPTIONS[bSet.startsWith('6') ? 3 : 4];
+        opts.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt.v; o.textContent = opt.l;
+            select.appendChild(o);
+        });
+    }
+
+    function updateNoteLabels() {
+        const rule = document.getElementById('conv-rule').value;
+        document.getElementById('label-call-note').textContent = (rule === '16to3') ? "［16分音符］" : "［3連符］";
+        document.getElementById('label-ans-note').textContent = (rule === '16to3') ? "［3連符］" : "［16分音符］";
+    }
+
+    function initGrids() {
+        const bSetEl = document.getElementById('beats-num');
+        const gridCall = document.getElementById('grid-call');
+        const gridRes = document.getElementById('grid-res');
+        const rule = document.getElementById('conv-rule').value;
+        if(!bSetEl || !gridCall || !gridRes) return;
+        const bSet = bSetEl.value;
+        const is2Bar = bSet.includes('-');
+        const barSplit = bSet.startsWith('6') ? 3 : 4;
+        const max = is2Bar ? (barSplit * 2) : parseInt(bSet);
+        
+        gridCall.innerHTML = ''; gridRes.innerHTML = '';
+        for(let i=0; i<max; i++) {
+            if (is2Bar && i === barSplit) {
+                gridCall.insertAdjacentHTML('beforeend', `<div class="bar-break"></div><div class="bar-line"></div>`);
+                gridRes.insertAdjacentHTML('beforeend', `<div class="bar-break"></div><div class="bar-line"></div>`);
+            }
+            gridCall.insertAdjacentHTML('beforeend', createBeatBox('c', i, rule === '16to3' ? 4 : 3));
+            gridRes.insertAdjacentHTML('beforeend', createBeatBox('r', i, rule === '16to3' ? 3 : 4));
+        }
+        updateFormOptions();
+        updateNoteLabels();
+    }
+
+    function createBeatBox(prefix, idx, subdivisions) {
+        let bars = '';
+        for(let i=0; i<subdivisions; i++) bars += '<div class="u-line"></div>';
+        return `<div class="beat-box" id="${prefix}-beat-${idx}">
+                    <div class="sub-grid" id="${prefix}-cells-${idx}"></div>
+                    <div class="under-bars">${bars}</div>
+                </div>`;
+    }
+
+    function playSound(time, freq, vol, type) {
+        if(!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = (type === 'guide') ? 'sine' : (type === 'call' ? 'triangle' : 'square');
+        osc.frequency.setValueAtTime(freq, time);
+        gain.gain.setTargetAtTime(vol, time, 0.005);
+        gain.gain.setTargetAtTime(0.001, time + 0.05, 0.01);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(time); osc.stop(time + 0.1);
+    }
+
+    function scheduler() {
+        while (nextNoteTime < audioCtx.currentTime + 0.1) {
+            runLogic(nextNoteTime);
+            nextNoteTime += 60.0 / getSafeBPM();
+        }
+        timerID = setTimeout(scheduler, 25);
+    }
+
+    function runLogic(time) {
+        const rule = document.getElementById('conv-rule').value;
+        const bSet = document.getElementById('beats-num').value;
+        const tMode = document.getElementById('train-mode').value;
+        const barSplit = bSet.startsWith('6') ? 3 : 4;
+        const maxBeats = bSet.includes('-') ? barSplit * 2 : parseInt(bSet);
+
+        if (document.getElementById('guide-click').checked) playSound(time, 1760, 0.05, 'guide');
+        
+        if (currentBeat === 0 && cyclePhase === 'CALL') {
+            const len = (rule === '16to3' ? 4 : 3);
+            ['a','b','c','d','e','f','g','h'].forEach(k => {
+                patterns[k] = Array.from({length: len}, () => Math.random() > 0.5 ? 1 : 0);
+            });
+            activeScheme = getScheme();
+        }
+
+        const data = patterns[activeScheme[currentBeat]];
+        updateUI(currentBeat, cyclePhase, data, rule, maxBeats, tMode, activeScheme, barSplit);
+        
+        const tempo = getSafeBPM();
+        if (cyclePhase === 'CALL') {
+            const step = (60.0 / tempo) / (rule === '16to3' ? 4 : 3);
+            data.forEach((on, i) => { if(on) playSound(time + (i * step), 880, 0.2, 'call'); });
+        } else if (cyclePhase === 'ANSWER') {
+            const resData = (rule === '16to3') ? [data[0], (data[1] || data[2]) ? 1 : 0, data[3]] : [data[0], 0, data[1], data[2]];
+            const step = (60.0 / tempo) / (rule === '16to3' ? 3 : 4);
+            resData.forEach((on, i) => { if(on) playSound(time + (i * step), 440, 0.2, 'answer'); });
+        }
+
+        currentBeat++;
+        if (currentBeat >= maxBeats) {
+            currentBeat = 0;
+            if (tMode === 'listen-only') {
+                cyclePhase = (cyclePhase === 'CALL') ? 'ANSWER' : 'CALL';
+            } else {
+                if (cyclePhase === 'CALL') cyclePhase = 'RESPONSE';
+                else if (cyclePhase === 'RESPONSE') cyclePhase = (tMode === 'try-hard') ? 'CALL' : 'ANSWER';
+                else if (cyclePhase === 'ANSWER') cyclePhase = (bSet === "1" || bSet === "2") ? 'REST' : 'CALL';
+                else cyclePhase = 'CALL';
+            }
+        }
+    }
+
+    function getScheme() {
+        const bSet = document.getElementById('beats-num').value;
+        const pKey = document.getElementById('pattern-select').value;
+        let poolKey = pKey;
+        if (pKey === 'group4-merged') poolKey = Math.random() > 0.5 ? 'group4-1' : 'group4-2';
+        
+        let pool = (poolKey.startsWith('group') || poolKey.includes('abc')) ? 
+            { "group3-1":["aaa", "aab", "aba", "baa"], "abc":["abc"], "group4-1":["aaaa", "aaab", "aaba", "abaa", "baaa"], "group4-2":["aabb", "abab", "abba"], "abcd":["abcd"] }[poolKey] : [poolKey];
+        
+        if (poolKey === 'rand-all') {
+            const chars = bSet.startsWith('6') ? "abc" : "abcd";
+            let res = ""; for(let i=0; i<(bSet.startsWith('6')?3:4); i++) res += chars[Math.floor(Math.random()*chars.length)];
+            pool = [res];
+        }
+
+        const unit = pool[Math.floor(Math.random() * pool.length)].split("");
+        if (bSet.endsWith('rep')) return unit.concat(unit);
+        if (bSet.endsWith('diff')) return unit.concat(unit.map(c => ({'a':'e','b':'f','c':'g','d':'h'})[c]));
+        return unit;
+    }
+
+    function updateUI(beat, phase, data, rule, max, mode, scheme, barSplit) {
+        for (let i = 0; i < max; i++) {
+            const cBox = document.getElementById(`c-beat-${i}`), rBox = document.getElementById(`r-beat-${i}`);
+            const cCell = document.getElementById(`c-cells-${i}`), rCell = document.getElementById(`r-cells-${i}`);
+            if(!cBox) continue;
+            cBox.classList.toggle('active', i === beat && phase !== 'REST');
+            rBox.classList.toggle('active', i === beat && phase !== 'REST');
+            
+            if (mode.startsWith('learn') || mode === 'listen-only' || (i <= beat && phase === 'CALL') || phase !== 'CALL') {
+                renderCells(cCell, patterns[scheme[i]]);
+            } else {
+                cCell.innerHTML = '';
+            }
+
+            const isVisibleAns = (mode === 'learn-all') || (mode === 'listen-only') || (i <= beat && phase === 'ANSWER') || (phase === 'REST');
+            if (isVisibleAns && mode !== 'try-hard') {
+                const pat = patterns[scheme[i]];
+                if (pat) {
+                    const resData = (rule === '16to3') ? [pat[0], (pat[1] || pat[2]) ? 1 : 0, pat[3]] : [pat[0], 0, pat[1], pat[2]];
+                    renderCells(rCell, resData);
+                }
+                rBox.classList.remove('invisible-notes');
+            } else {
+                rCell.innerHTML = '';
+                rBox.classList.add('invisible-notes');
+            }
+        }
+        
+        const status = document.getElementById('status');
+        const barNum = Math.floor(beat / barSplit) + 1;
+        const beatNum = (beat % barSplit) + 1;
+        const barIcon = barNum === 1 ? '①' : '②';
+        
+        const displayPhase = (phase === 'RESPONSE') ? 'READY' : phase;
+        status.textContent = (max > 4) ? `${displayPhase} : ${barIcon}-${beatNum}` : `${displayPhase} : ${beat + 1}`;
+        status.className = `mode-${phase.toLowerCase()}`;
+    }
+
+    function renderCells(container, notes) {
+        if(!container || !notes) return;
+        container.innerHTML = '';
+        notes.forEach(on => {
+            const c = document.createElement('div');
+            c.className = 'cell' + (on ? ' on' : '');
+            container.appendChild(c);
+        });
+    }
+
+    document.getElementById('startBtn').addEventListener('click', async function() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (isPlaying) {
+            clearTimeout(timerID);
+            isPlaying = false;
+            this.textContent = 'START SESSION';
+            this.classList.remove('stop');
+            document.getElementById('status').textContent = 'READY';
+            document.getElementById('status').className = 'mode-rest';
+        } else {
+            isPlaying = true;
+            nextNoteTime = audioCtx.currentTime + 0.1;
+            currentBeat = 0;
+            cyclePhase = 'CALL';
+            scheduler();
+            this.textContent = 'STOP';
+            this.classList.add('stop');
+        }
+    });
+
+    window.addEventListener('load', initGrids);
+    document.getElementById('beats-num').addEventListener('change', initGrids);
+    document.getElementById('conv-rule').addEventListener('change', initGrids);
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Negative Note Explorer V2.10</title>
+    <style>
+        :root {
+            --bg-color: #050505;
+            --panel-color: #121212;
+            --accent-color: #00e5ff;
+            --pos-color: #ff3d00;
+            --neg-color: #2979ff;
+            --empty-color: #222;
+            --text-color: #e0e0e0;
+            --grid-line: #555;
+        }
+        body { font-family: 'Inter', -apple-system, sans-serif; background-color: var(--bg-color); color: var(--text-color); display: flex; justify-content: center; padding: 20px; margin: 0; }
+        .container { background-color: var(--panel-color); padding: 30px; border-radius: 16px; width: 100%; max-width: 950px; box-shadow: 0 25px 60px rgba(0,0,0,0.9); border: 1px solid #333; }
+        
+        .status { text-align: center; font-family: 'Courier New', monospace; font-size: 1.2em; color: #888; margin-bottom: 20px; }
+        .status span { color: var(--accent-color); font-weight: bold; }
+
+        /* シーケンサーエリア */
+        .sequencer-area { background: #000; padding: 25px; border-radius: 12px; margin-bottom: 25px; display: flex; flex-direction: column; align-items: center; border: 1px solid #222; }
+        #sequencer-grid { display: flex; justify-content: center; }
+        
+        /* SWAP機能 */
+        .swapped .cell-stack { flex-direction: column-reverse !important; }
+
+        /* セル配置と縦線の計算: セル間隔を4px、境界線2px+左右余白1px=合計4pxで等間隔を維持 */
+        .beat-group { display: flex; gap: 4px; border-right: 2px solid var(--grid-line); padding-right: 1px; margin-right: 1px; }
+        .beat-group:last-child { border-right: none; margin-right: 0; padding-right: 0; }
+        .no-border { border-right: none !important; margin-right: 0 !important; padding-right: 0 !important; gap: 4px; }
+
+        .cell-stack { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .cell { width: 34px; height: 34px; background: var(--empty-color); border-radius: 3px; transition: background 0.05s; }
+        .cell.pos { background-color: var(--pos-color); box-shadow: 0 0 10px rgba(255, 61, 0, 0.4); }
+        .cell.neg { background-color: var(--neg-color); box-shadow: 0 0 10px rgba(41, 121, 255, 0.4); }
+        .cell.hidden { background-color: var(--empty-color) !important; box-shadow: none !important; }
+        .cell.null { visibility: hidden; }
+
+        .guide-bar { width: 90%; height: 5px; background: transparent; border-radius: 3px; }
+        .guide-bar.active { background: var(--accent-color); box-shadow: 0 0 12px var(--accent-color); }
+
+        /* コントロール */
+        .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .group { background: rgba(255,255,255,0.04); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
+        label { display: block; font-size: 0.75em; margin-bottom: 8px; color: #aaa; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+        select, input[type="number"] { width: 100%; background: #222; color: white; border: 1px solid #444; padding: 10px; border-radius: 6px; font-size: 0.9em; outline: none; }
+        
+        .flex-row { display: flex; align-items: center; gap: 8px; }
+        .lbl-mini { font-size: 0.75em; color: #888; font-weight: bold;}
+        input.num-short { width: 60px !important; padding: 8px 4px !important; text-align: center; }
+
+        .btn-toggle-group { display: flex; gap: 2px; }
+        .btn-toggle-group button { flex: 1; padding: 8px 4px; font-size: 0.75em; border: 1px solid #444; background: #252525; color: #999; cursor: pointer; border-radius: 4px; }
+        .btn-toggle-group button.active { background: var(--accent-color); color: #000; font-weight: 800; border-color: var(--accent-color); }
+
+        .actions { display: flex; gap: 12px; margin-bottom: 20px; }
+        .actions button { flex: 1; padding: 18px; border-radius: 8px; border: none; font-weight: 900; cursor: pointer; font-size: 1.1em; transition: all 0.2s; }
+        #startBtn { background: #00c853; color: white; }
+        #startBtn.stop { background: #ff1744; }
+        #nextBtn { background: #2979ff; color: white; }
+        #swapBtn { background: #6200ea; color: white; flex: 0.4; }
+
+        footer { text-align: center; font-size: 0.75em; color: #666; margin-top: 15px; letter-spacing: 1.5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="status">BAR: <span id="barNum">1</span> | STEP: <span id="stepNum">1</span></div>
+
+    <div class="sequencer-area">
+        <div id="sequencer-grid"></div>
+    </div>
+
+    <div class="config-grid">
+        <div class="group">
+            <label>GRID MODE</label>
+            <div class="btn-toggle-group" id="gridModeGroup">
+                <button data-val="16" class="active">16分 (4p)</button>
+                <button data-val="12">3連 (3p)</button>
+            </div>
+        </div>
+        <div class="group">
+            <label>BEAT SELECT</label>
+            <select id="beatSelect"></select>
+        </div>
+        <div class="group">
+            <label>DIFFICULTY</label>
+            <select id="diffSelect"></select>
+        </div>
+    </div>
+
+    <div class="config-grid">
+        <div class="group">
+            <label>POSITIVE (VOL / TONE)</label>
+            <div class="btn-toggle-group" id="posVolGroup"><button data-val="0.1">小</button><button data-val="0.4" class="active">中</button><button data-val="0.8">大</button></div>
+            <div class="btn-toggle-group" id="posToneGroup" style="margin-top:5px;"><button data-val="440" class="active">A</button><button data-val="880">B</button></div>
+        </div>
+        <div class="group">
+            <label>NEGATIVE (VOL / TONE)</label>
+            <div class="btn-toggle-group" id="negVolGroup"><button data-val="0.1">小</button><button data-val="0.4">中</button><button data-val="0.8" class="active">大</button></div>
+            <div class="btn-toggle-group" id="negToneGroup" style="margin-top:5px;"><button data-val="440">A</button><button data-val="880" class="active">B</button></div>
+        </div>
+        <div class="group">
+            <label>CLICK</label>
+            <div class="flex-row">
+                <input type="checkbox" id="clickToggle" checked>
+                <div class="btn-toggle-group" id="clickVolGroup" style="flex:1;">
+                    <button data-val="0.05">小</button><button data-val="0.15" class="active">中</button><button data-val="0.3">大</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="config-grid">
+        <div class="group">
+            <label>TEMPO</label>
+            <input type="number" id="tempo" value="80" min="40" max="200" class="num-short">
+        </div>
+        <div class="group">
+            <label>AUTO START (BARS)</label>
+            <div class="flex-row">
+                <span class="lbl-mini">DISP:</span><input type="number" id="showAfter" value="5" min="1" class="num-short">
+                <span class="lbl-mini" style="margin-left:10px;">SND:</span><input type="number" id="soundAfter" value="9" min="1" class="num-short">
+            </div>
+        </div>
+        <div class="group">
+            <label>AUTO MUTE (BARS)</label>
+            <div class="flex-row">
+                <label style="display:flex; align-items:center; gap:2px;"><input type="checkbox" id="posMuteCheck"><span class="lbl-mini">POS:</span></label>
+                <input type="number" id="posMuteBar" value="24" min="1" class="num-short">
+                <label style="display:flex; align-items:center; gap:2px; margin-left:8px;"><input type="checkbox" id="negMuteCheck"><span class="lbl-mini">NEG:</span></label>
+                <input type="number" id="negMuteBar" value="16" min="1" class="num-short">
+            </div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button id="startBtn">START</button>
+        <button id="nextBtn">NEXT RHYTHM</button>
+        <button id="swapBtn">SWAP VIEW</button>
+    </div>
+
+    <footer>© 2026 studio ritMOnkey by ARTHAND</footer>
+</div>
+
+<script>
+    let audioCtx = null, isRunning = false;
+    let currentStep = 0, currentBar = 1, nextNoteTime = 0.0;
+    let timerID = null, animationID = null;
+    let pattern = [], posTone = 440, negTone = 880, posVol = 0.4, negVol = 0.8, clickVol = 0.15, gridMode = 16;
+    let stepTimes = [];
+
+    const difficultyMap = {
+        "1beat": { "Easy": ["a"] },
+        "1beat_nn": { "Easy": ["a"] },
+        "2beat": { "Easy": ["aa"], "Normal": ["ab"] },
+        "2beat_nn": { "Easy": ["aa"], "Normal": ["ab"] },
+        "3beat": { "Easy": ["aaa"], "Normal": ["aab", "aba", "abb"], "Hard": ["abc"] },
+        "4beat": { "Easy": ["aaaa"], "Normal": ["aaab", "aaba", "abaa", "abbb", "aabb", "abab"], "Hard": ["aabc", "abca", "abcc", "abbc"], "Expert": ["abcd"] },
+        "4433": { "Hard": ["aabb"], "Expert": ["abcd"] },
+        "4343": { "Hard": ["abab"], "Expert": ["abcd"] },
+        "3322": { "Hard": ["aabb"], "Expert": ["abcd"] },
+        "3232": { "Hard": ["abab"], "Expert": ["abcd"] }
+    };
+
+    const beatConfigs = {
+        "16": [
+            {id: "1beat", text: "1beat (4on/4off)", struct: [4, 4]},
+            {id: "1beat_nn", text: "1beat (No Null)", struct: [4]},
+            {id: "2beat", text: "2beat (8on/8off)", struct: [4, 4, 4, 4]},
+            {id: "2beat_nn", text: "2beat (No Null)", struct: [4, 4]},
+            {id: "3beat", text: "3beat (12on)", struct: [4, 4, 4]},
+            {id: "4beat", text: "4beat (16on)", struct: [4, 4, 4, 4]},
+            {id: "4433", text: "4-4-3-3 (14p)", struct: [4, 4, 3, 3]},
+            {id: "4343", text: "4-3-4-3 (14p)", struct: [4, 3, 4, 3]}
+        ],
+        "12": [
+            {id: "1beat", text: "1beat (3on/3off)", struct: [3, 3]},
+            {id: "1beat_nn", text: "1beat (No Null)", struct: [3]},
+            {id: "2beat", text: "2beat (6on/6off)", struct: [3, 3, 3, 3]},
+            {id: "2beat_nn", text: "2beat (No Null)", struct: [3, 3]},
+            {id: "3beat", text: "3beat (9on)", struct: [3, 3, 3]},
+            {id: "4beat", text: "4beat (12on)", struct: [3, 3, 3, 3]},
+            {id: "3322", text: "3-3-2-2 (10p)", struct: [3, 3, 2, 2]},
+            {id: "3232", text: "3-2-3-2 (10p)", struct: [3, 2, 3, 2]}
+        ]
+    };
+
+    function stop() {
+        isRunning = false;
+        document.getElementById('startBtn').textContent = "START";
+        document.getElementById('startBtn').classList.remove('stop');
+        clearTimeout(timerID);
+        cancelAnimationFrame(animationID);
+        currentStep = 0; currentBar = 1; stepTimes = [];
+        updateStatus();
+    }
+
+    function updateStatus() {
+        document.getElementById('barNum').textContent = currentBar;
+        document.getElementById('stepNum').textContent = (currentStep % (pattern.length || 1)) + 1;
+    }
+
+    function initUI() {
+        const bSel = document.getElementById('beatSelect');
+        bSel.innerHTML = '';
+        beatConfigs[gridMode].forEach(c => {
+            const o = document.createElement('option');
+            o.value = c.id; o.textContent = c.text; bSel.appendChild(o);
+        });
+        updateDiffUI();
+    }
+
+    function updateDiffUI() {
+        const bId = document.getElementById('beatSelect').value;
+        const dSel = document.getElementById('diffSelect');
+        dSel.innerHTML = '';
+        const diffs = difficultyMap[bId];
+        Object.keys(diffs).forEach(d => {
+            const o = document.createElement('option');
+            o.value = d; o.textContent = d; dSel.appendChild(o);
+        });
+        generateRhythm();
+    }
+
+    function generateRhythm() {
+        stop();
+        const bId = document.getElementById('beatSelect').value;
+        const dId = document.getElementById('diffSelect').value;
+        const config = beatConfigs[gridMode].find(c => c.id === bId);
+        const formulaArr = difficultyMap[bId][dId]; 
+        const formula = formulaArr[Math.floor(Math.random() * formulaArr.length)];
+        
+        const lib = {};
+        ['a','b','c','d'].forEach(char => {
+            lib[char] = Array.from({length: 4}, () => (Math.random() < 0.5 ? 1 : 0));
+        });
+
+        pattern = [];
+        config.struct.forEach((len, idx) => {
+            const char = formula[idx] || formula[0];
+            const base = lib[char];
+            const isRestGroup = ((bId === "1beat" && idx === 1) || (bId === "2beat" && idx >= 2));
+            
+            for(let i=0; i<len; i++) {
+                if(isRestGroup) pattern.push(null);
+                else pattern.push(base[i % base.length]);
+            }
+        });
+        buildGrid();
+    }
+
+    function buildGrid() {
+        const grid = document.getElementById('sequencer-grid');
+        grid.innerHTML = '';
+        const bId = document.getElementById('beatSelect').value;
+        const config = beatConfigs[gridMode].find(c => c.id === bId);
+
+        let sIdx = 0;
+        config.struct.forEach((len) => {
+            const group = document.createElement('div');
+            group.className = 'beat-group';
+            // No Null の 1beatのみ縦線を消す
+            if(bId === "1beat_nn") group.classList.add('no-border');
+
+            for(let i=0; i<len; i++) {
+                const stack = document.createElement('div');
+                stack.className = 'cell-stack';
+                const pClass = (pattern[sIdx] === 1) ? 'cell pos' : (pattern[sIdx] === null ? 'cell null' : 'cell');
+                const nClass = (pattern[sIdx] === 0) ? 'cell neg hidden' : (pattern[sIdx] === null ? 'cell null' : 'cell');
+                
+                stack.innerHTML = `<div class="cell ${pClass}" id="p-${sIdx}"></div>
+                                   <div class="guide-bar" id="g-${sIdx}"></div>
+                                   <div class="cell ${nClass}" id="n-${sIdx}"></div>`;
+                group.appendChild(stack);
+                sIdx++;
+            }
+            grid.appendChild(group);
+        });
+    }
+
+    function play(f, v, t) {
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.frequency.value = f;
+        g.gain.setValueAtTime(v, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(t); o.stop(t + 0.1);
+    }
+
+    function scheduler() {
+        while (nextNoteTime < audioCtx.currentTime + 0.1) {
+            const idx = currentStep % pattern.length;
+            const bId = document.getElementById('beatSelect').value;
+            const config = beatConfigs[gridMode].find(c => c.id === bId);
+            
+            const sndAfter = parseInt(document.getElementById('soundAfter').value);
+            const posMute = document.getElementById('posMuteCheck').checked && currentBar >= parseInt(document.getElementById('posMuteBar').value);
+            const negMute = document.getElementById('negMuteCheck').checked && currentBar >= parseInt(document.getElementById('negMuteBar').value);
+
+            let acc = 0;
+            config.struct.forEach(l => {
+                if(idx === acc && document.getElementById('clickToggle').checked) play(220, clickVol, nextNoteTime);
+                acc += l;
+            });
+
+            if(pattern[idx] === 1 && !posMute) play(posTone, posVol, nextNoteTime);
+            else if(pattern[idx] === 0 && currentBar >= sndAfter && !negMute) play(negTone, negVol, nextNoteTime);
+
+            stepTimes.push({ t: nextNoteTime, s: idx, b: currentBar });
+            nextNoteTime += (60 / document.getElementById('tempo').value) / (gridMode == 16 ? 4 : 3);
+            currentStep++;
+            if(currentStep % pattern.length === 0) currentBar++;
+        }
+        timerID = setTimeout(scheduler, 25);
+    }
+
+    function draw() {
+        if(!isRunning) return;
+        const now = audioCtx.currentTime;
+        let actS = -1, actB = 1;
+        while(stepTimes.length > 0 && stepTimes[0].t <= now) {
+            const obj = stepTimes.shift();
+            actS = obj.s; actB = obj.b;
+        }
+        if(actS !== -1) {
+            document.querySelectorAll('.guide-bar').forEach(el => el.classList.remove('active'));
+            const g = document.getElementById(`g-${actS}`);
+            if(g) g.classList.add('active');
+            document.getElementById('barNum').textContent = actB;
+            document.getElementById('stepNum').textContent = actS + 1;
+            
+            const dispAfter = parseInt(document.getElementById('showAfter').value);
+            pattern.forEach((val, i) => {
+                if(val === 0) {
+                    const n = document.getElementById(`n-${i}`);
+                    if(n) {
+                        if(actB >= dispAfter) n.classList.remove('hidden');
+                        else n.classList.add('hidden');
+                    }
+                }
+            });
+        }
+        animationID = requestAnimationFrame(draw);
+    }
+
+    function setupT(id, cb) {
+        document.querySelectorAll(`#${id} button`).forEach(b => {
+            b.addEventListener('click', function() {
+                this.parentElement.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+                this.classList.add('active'); cb(this.dataset.val);
+            });
+        });
+    }
+
+    setupT('gridModeGroup', v => { gridMode = v; initUI(); });
+    setupT('clickVolGroup', v => clickVol = parseFloat(v));
+    setupT('posVolGroup', v => posVol = parseFloat(v));
+    setupT('negVolGroup', v => negVol = parseFloat(v));
+    setupT('posToneGroup', v => posTone = parseFloat(v));
+    setupT('negToneGroup', v => negTone = parseFloat(v));
+
+    document.getElementById('beatSelect').addEventListener('change', updateDiffUI);
+    document.getElementById('diffSelect').addEventListener('change', generateRhythm);
+    document.getElementById('nextBtn').addEventListener('click', generateRhythm);
+    document.getElementById('swapBtn').addEventListener('click', () => {
+        document.getElementById('sequencer-grid').classList.toggle('swapped');
+    });
+
+    document.getElementById('startBtn').addEventListener('click', function() {
+        if(!audioCtx) audioCtx = new AudioContext();
+        if(isRunning) stop();
+        else {
+            isRunning = true; this.textContent = "STOP"; this.classList.add('stop');
+            currentStep = 0; currentBar = 1; nextNoteTime = audioCtx.currentTime + 0.05;
+            scheduler(); draw();
+        }
+    });
+
+    initUI();
+</script>
+</body>
+</html>
