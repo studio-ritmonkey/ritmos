@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>読み替えくん v24.3.1</title>
+    <style>
+        /* CSSは完全維持 */
+        body { margin: 0; padding: 10px; background: #121212; color: #eee; font-family: sans-serif; -webkit-text-size-adjust: 100%; }
+        .rmp-wrapper { width: 100%; max-width: 740px; margin: auto; }
+        .container { background: #1e1e1e; padding: 15px; border-radius: 12px; border: 1px solid #333; box-sizing: border-box; }
+        #status { font-size: 1.6rem; font-weight: 900; margin-bottom: 15px; padding: 10px; border-radius: 8px; text-align: center; min-height: 32px; line-height: 32px; letter-spacing: 2px; }
+        .mode-ready { background: #333; color: #aaa; }
+        .mode-count { background: #222; color: #888; }
+        .mode-call { background: #0051ff; color: #fff; } 
+        .mode-response { background: #ff9800; color: #000; }
+        .mode-answer { background: #00c853; color: #fff; } 
+        .visualizer-area { margin-bottom: 15px; }
+        .grid-panel { background: #181818; padding: 10px; border-radius: 8px; border: 1px solid #252525; margin-bottom: 10px; }
+        .grid-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        .grid-label { font-size: 0.75rem; font-weight: bold; color: #4fc3f7; }
+        .display-options { display: flex; gap: 8px; }
+        .opt-item { font-size: 0.65rem; color: #888; display: flex; align-items: center; gap: 3px; cursor: pointer; }
+        .opt-item input { margin: 0; cursor: pointer; }
+        .grid { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; width: 100%; box-sizing: border-box;}
+        .beat-box { width: 76px; height: 58px; padding: 4px; background: #222; border-radius: 6px; border: 2px solid #333; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; box-sizing: border-box; position: relative; }
+        .beat-box.active { border-color: #fff; background: #333; transform: scale(1.02); z-index: 5; }
+        .sub-grid { display: flex; justify-content: center; align-items: center; gap: 3px; }
+        .cell { width: 12px; height: 12px; border-radius: 2px; background: #333; border: 1px solid #444; }
+        .cell.on { background: #fff; box-shadow: 0 0 4px #fff; }
+        .cell.flash { background: #ffea00 !important; box-shadow: 0 0 15px #ffea00; border-color: #fff; }
+        .bar-line { width: 4px; height: 50px; background: #444; margin: 0 4px; border-radius: 2px; }
+        .action-bar { display: grid; grid-template-columns: 1fr 80px; gap: 10px; margin-bottom: 15px; }
+        #startBtn { padding: 14px; font-size: 1.2rem; font-weight: bold; background: #00c853; border: none; color: white; border-radius: 8px; cursor: pointer; }
+        #startBtn.stop { background: #ff1744; }
+        #refreshBtn { padding: 14px; background: #512da8; border: none; color: white; border-radius: 8px; cursor: pointer; font-size: 1.5rem; }
+        .controls-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+        .control-group { background: #252525; padding: 8px; border-radius: 6px; border: 1px solid #333; }
+        label { display: block; font-size: 0.65rem; color: #888; margin-bottom: 4px; font-weight: bold; }
+        select, input[type="number"] { width: 100%; padding: 6px; background: #333; border: 1px solid #444; color: white; border-radius: 4px; font-size: 0.8rem; }
+        .check-row { display: flex; gap: 10px; align-items: center; margin-top: 5px; }
+        .check-item { display: flex; align-items: center; gap: 4px; font-size: 0.65rem; color: #ccc; cursor: pointer; }
+        .footer-copyright { text-align: center; font-size: 0.7rem; color: #666; margin-top: 15px; }
+    </style>
+</head>
+<body>
+<div class="rmp-wrapper">
+    <div class="container">
+        <div id="status" class="mode-ready">READY</div>
+        <div class="visualizer-area">
+            <div class="grid-panel">
+                <div class="grid-header">
+                    <span class="grid-label" id="label-call">CALL</span>
+                    <div class="display-options">
+                        <label class="opt-item"><input type="radio" name="view-c" value="on" checked>ON</label>
+                        <label class="opt-item"><input type="radio" name="view-c" value="flash">FLASH</label>
+                        <label class="opt-item"><input type="radio" name="view-c" value="off">OFF</label>
+                    </div>
+                </div>
+                <div id="grid-call" class="grid"></div>
+            </div>
+            <div class="grid-panel">
+                <div class="grid-header">
+                    <span class="grid-label" id="label-res">RESPONSE</span>
+                    <div class="display-options">
+                        <label class="opt-item"><input type="radio" name="view-r" value="on" checked>ON</label>
+                        <label class="opt-item"><input type="radio" name="view-r" value="flash">FLASH</label>
+                        <label class="opt-item"><input type="radio" name="view-r" value="off">OFF</label>
+                    </div>
+                </div>
+                <div id="grid-res" class="grid"></div>
+            </div>
+        </div>
+        <div class="action-bar">
+            <button id="startBtn">START SESSION</button>
+            <button id="refreshBtn">↻</button>
+        </div>
+        <div class="controls-grid">
+            <div class="control-group"><label>Beats</label><select id="beats-num">
+                <option value="1beat(w/rest)">1beat(w/rest)</option>
+                <option value="1beat">1beat</option>
+                <option value="2beat(w/rest)">2beat(w/rest)</option>
+                <option value="2beat">2beat</option>
+                <option value="3beat">3beat</option>
+                <option value="4beat" selected>4beat</option>
+            </select></div>
+            <div class="control-group"><label>Bar Rule</label><select id="bar-rule">
+                <option value="1bar">1bar</option>
+                <option value="2bar Repeat">2bar Repeat</option>
+                <option value="2bar Shuffle">2bar Shuffle</option>
+                <option value="2bar Parallel">2bar Parallel</option>
+                <option value="2bar Variation">2bar Variation</option>
+                <option value="2bar All">2bar All</option>
+                <option value="2bar Mystery">2bar Mystery</option>
+            </select></div>
+            <div class="control-group"><label>Difficulty</label><select id="diff-select"></select></div>
+            <div class="control-group"><label>Conversion</label><select id="conv-rule">
+                <option value="16to3" selected>16th → 3let</option>
+                <option value="3to16">3let → 16th</option>
+            </select></div>
+        </div>
+        <div class="controls-grid">
+            <div class="control-group"><label>Loop Type</label><select id="loop-type">
+                <option value="LOOP">LOOP (C/R)</option>
+                <option value="STEP" selected>STEP (C/R/A)</option>
+                <option value="TRY">TRY (C/R)</option>
+            </select></div>
+            <div class="control-group"><label>Gen Cycle</label><select id="gen-cycle">
+                <option value="Every">Every</option>
+                <option value="2Cycle" selected>2Cycle</option>
+                <option value="4Cycle">4Cycle</option>
+                <option value="Manual">Manual</option>
+            </select></div>
+            <div class="control-group"><label>BPM</label><input type="number" id="bpm-input" value="90"></div>
+            <div class="control-group">
+                <label>Click & Pulse</label>
+                <div class="check-row">
+                    <label class="check-item"><input type="checkbox" id="check-click" checked>Click</label>
+                    <label class="check-item"><input type="checkbox" id="check-pulse" checked>Pulse</label>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="footer-copyright">studio ritMOnkey by ARTHAND &copy; 2026</div>
+</div>
+
+<script>
+const PATS = {
+    "16": { a:[1,0,0,0], b:[1,0,1,0], c:[1,1,0,1], d:[1,1,1,1], e:[0,1,0,0], f:[0,1,0,1], g:[0,0,1,1], h:[1,0,1,1], n:[0,0,0,0] },
+    "3let": { a:[1,0,0], b:[1,0,1], c:[1,1,1], d:[0,1,1], e:[0,1,0], f:[1,1,0], g:[0,0,1], h:[1,0,0], n:[0,0,0] }
+};
+
+const LOGIC_TABLE = {
+    "1beat(w/rest)": { Easy: ["an"] },
+    "1beat": { Easy: ["a"] },
+    "2beat(w/rest)": { Easy: ["aann"], Normal: ["abnn"] },
+    "2beat": { Easy: ["aa"], Normal: ["ab"] },
+    "3beat": { Easy: ["aaa"], Normal: ["aab", "aba", "abb"], Hard: ["abc", "rnd"] },
+    "4beat": { Easy: ["aaaa"], Normal: ["aaab", "aaba", "abaa", "abbb", "aabb", "abba", "abab"], Hard: ["aabc", "abca", "abcc", "abbc"], Expert: ["abcd", "rnd"] }
+};
+
+const CIRCLES = ['①','②','③','④','⑤','⑥','⑦','⑧'];
+let audioCtx = null, isPlaying = false, timerId = null;
+let currentPhase = "READY", cycleCount = 0;
+let data = { call: [], res: [], callS: 4, resS: 3 };
+let pendingData = null; 
+let nextNoteTime = 0, drawQueue = [];
+let schedBeat = 0, schedSub = 0, schedPhase = "READY";
+let needsRender = false; // 描画遅延適用フラグ
+
+function init() {
+    updateDiffMenu();
+    document.getElementById('beats-num').onchange = updateDiffMenu;
+    ['diff-select','bar-rule','conv-rule'].forEach(id => {
+        document.getElementById(id).onchange = generate;
+    });
+    document.querySelectorAll('input[name^="view-"]').forEach(r => r.onchange = () => { if(!isPlaying) renderGrid(); });
+    document.getElementById('refreshBtn').onclick = generate;
+    document.getElementById('startBtn').onclick = toggle;
+    generate();
+    requestAnimationFrame(updateDraw);
+}
+
+function updateDiffMenu() {
+    const bVal = document.getElementById('beats-num').value;
+    const dSel = document.getElementById('diff-select');
+    dSel.innerHTML = "";
+    Object.keys(LOGIC_TABLE[bVal]).forEach(k => dSel.add(new Option(k, k)));
+    generate();
+}
+
+function generate() {
+    const is16to3 = document.getElementById('conv-rule').value === "16to3";
+    const bType = document.getElementById('beats-num').value;
+    const dLevel = document.getElementById('diff-select').value;
+    const rule = document.getElementById('bar-rule').value;
+
+    const newSet = {
+        callS: is16to3 ? 4 : 3,
+        resS: is16to3 ? 3 : 4,
+        call: [],
+        res: []
+    };
+
+    function pickKeys() {
+        const pool = LOGIC_TABLE[bType][dLevel];
+        let retry = 0;
+        while(retry < 50) {
+            let chosenStr = pool[Math.floor(Math.random() * pool.length)];
+            let keys = (chosenStr === "rnd") ? Array.from({length: bType.includes("3beat")?3:4}, () => "abcdefgh"[Math.floor(Math.random() * ((dLevel === "Expert")?8:3))]) : chosenStr.split("");
+            if(keys.some(k => k !== "n")) return keys;
+            retry++;
+        }
+        return ["a"];
+    }
+
+    let k1 = pickKeys(), k2 = (rule.startsWith("2bar")) ? (rule === "2bar Repeat" ? [...k1] : (rule === "2bar Shuffle" ? [...k1].sort(()=>Math.random()-0.5) : pickKeys())) : [];
+    const finalKeys = k1.concat(k2);
+    const src = is16to3 ? PATS["16"] : PATS["3let"];
+    newSet.call = finalKeys.flatMap(k => src[k] || src.n);
+    newSet.res = finalKeys.flatMap(k => {
+        const p = src[k] || src.n;
+        return is16to3 ? [p[0], (p[1] || p[2] ? 1 : 0), p[3]] : [p[0], 0, (p[1] || 0), (p[2] || 0)];
+    });
+
+    if(!isPlaying) {
+        data = newSet;
+        renderGrid();
+    } else {
+        pendingData = newSet; 
+    }
+}
+
+function renderGrid() {
+    const gc = document.getElementById('grid-call'), gr = document.getElementById('grid-res');
+    gc.innerHTML = ""; gr.innerHTML = "";
+    document.getElementById('label-call').textContent = `CALL [${data.callS === 4 ? 16 : 3}]`;
+    document.getElementById('label-res').textContent = `RESPONSE [${data.resS === 3 ? 3 : 16}]`;
+
+    const total = data.call.length / data.callS;
+    const is2bar = document.getElementById('bar-rule').value.startsWith("2bar");
+    for(let i=0; i<total; i++) {
+        if(is2bar && i > 0 && i === total/2) {
+            gc.appendChild(Object.assign(document.createElement('div'), {className:'bar-line'}));
+            gr.appendChild(Object.assign(document.createElement('div'), {className:'bar-line'}));
+        }
+        gc.appendChild(createBox('c', i, data.callS));
+        gr.appendChild(createBox('r', i, data.resS));
+    }
+
+    const vc = document.querySelector('input[name="view-c"]:checked').value;
+    const vr = document.querySelector('input[name="view-r"]:checked').value;
+    for(let b=0; b<total; b++) {
+        const cb = document.getElementById(`c-b-${b}`), rb = document.getElementById(`r-b-${b}`);
+        const cc = cb.querySelector('.sub-grid').children, rc = rb.querySelector('.sub-grid').children;
+        for(let si=0; si<data.callS; si++) if(data.call[b*data.callS+si] && vc === "on") cc[si].classList.add('on');
+        for(let si=0; si<data.resS; si++) if(data.res[b*data.resS+si] && vr === "on") rc[si].classList.add('on');
+    }
+}
+
+function createBox(p, i, s) {
+    const b = Object.assign(document.createElement('div'), {className:'beat-box', id:`${p}-b-${i}`});
+    const sg = Object.assign(document.createElement('div'), {className:'sub-grid'});
+    for(let j=0; j<s; j++) sg.appendChild(Object.assign(document.createElement('div'), {className:'cell'}));
+    b.appendChild(sg);
+    return b;
+}
+
+function updateDraw() {
+    if(!isPlaying || !audioCtx) { requestAnimationFrame(updateDraw); return; }
+    const now = audioCtx.currentTime;
+    while(drawQueue.length > 0 && drawQueue[0].time <= now) {
+        const item = drawQueue.shift();
+        // 遅延適用フラグがある場合、ここでDOMを再構築
+        if(item.reRender && pendingData) {
+            data = pendingData;
+            pendingData = null;
+            renderGrid();
+        }
+        executeUIUpdate(item);
+    }
+    requestAnimationFrame(updateDraw);
+}
+
+function executeUIUpdate(item) {
+    const { phase, beat, sub, totalBeats } = item;
+    const s = document.getElementById('status');
+    const bType = document.getElementById('beats-num').value;
+    const bNum = bType.includes("1beat") ? 1 : (bType.includes("2beat") ? 2 : (bType.includes("3beat") ? 3 : 4));
+    
+    if(phase === "COUNT") s.textContent = `COUNT ${beat + 1}`;
+    else s.textContent = `${phase} ${CIRCLES[beat % bNum] || (beat + 1)}`;
+    s.className = `mode-${phase.toLowerCase()}`;
+
+    const vc = document.querySelector('input[name="view-c"]:checked').value;
+    const vr = document.querySelector('input[name="view-r"]:checked').value;
+
+    for(let b=0; b<totalBeats; b++) {
+        const cb = document.getElementById(`c-b-${b}`), rb = document.getElementById(`r-b-${b}`);
+        if(!cb) continue;
+        cb.classList.toggle('active', phase === "CALL" && beat === b);
+        rb.classList.toggle('active', (phase === "RESPONSE" || phase === "ANSWER") && beat === b);
+
+        const cc = cb.querySelector('.sub-grid').children, rc = rb.querySelector('.sub-grid').children;
+        for(let si=0; si<data.callS; si++){
+            const on = data.call[b * data.callS + si];
+            const show = (vc === "on") || (vc === "flash" && phase === "CALL" && beat === b);
+            cc[si].className = 'cell' + (on && show ? ' on' : '');
+        }
+        for(let si=0; si<data.resS; si++){
+            const on = data.res[b * data.resS + si];
+            const show = (vr === "on") || (vr === "flash" && (phase === "RESPONSE" || phase === "ANSWER") && beat === b);
+            rc[si].className = 'cell' + (on && show ? ' on' : '');
+        }
+    }
+}
+
+function toggle() {
+    if(isPlaying) {
+        isPlaying = false; clearTimeout(timerId);
+        document.getElementById('startBtn').textContent = "START SESSION";
+        document.getElementById('startBtn').classList.remove('stop');
+        document.getElementById('status').className = "mode-ready";
+        document.getElementById('status').textContent = "READY";
+        renderGrid();
+    } else {
+        if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        const dummy = audioCtx.createBufferSource();
+        dummy.buffer = audioCtx.createBuffer(1, 1, 22050);
+        dummy.connect(audioCtx.destination);
+        dummy.start();
+
+        isPlaying = true; schedPhase = "COUNT"; schedBeat = 0; schedSub = 0; drawQueue = [];
+        nextNoteTime = audioCtx.currentTime + 0.1;
+        document.getElementById('startBtn').textContent = "STOP";
+        document.getElementById('startBtn').classList.add('stop');
+        scheduler();
+    }
+}
+
+function scheduler() {
+    if(!isPlaying) return;
+    while(nextNoteTime < audioCtx.currentTime + 0.1) {
+        const steps = (schedPhase === "RESPONSE" || schedPhase === "ANSWER") ? data.resS : data.callS;
+        const idx = schedBeat * steps + schedSub;
+
+        if(schedSub === 0 && document.getElementById('check-click').checked) playSound(1760, 0.05, nextNoteTime, 'sine');
+        if(document.getElementById('check-pulse').checked) playSound(220, 0.005, nextNoteTime, 'sine');
+        if(schedPhase === "CALL" && data.call[idx]) playSound(880, 0.2, nextNoteTime, 'triangle');
+        if((schedPhase === "RESPONSE" || schedPhase === "ANSWER") && data.res[idx]) {
+            if(schedPhase === "ANSWER" || (schedPhase === "RESPONSE" && document.getElementById('loop-type').value !== "TRY")) { 
+                playSound(440, 0.2, nextNoteTime, 'square'); 
+            }
+        }
+
+        // 描画キューに予約。needsRenderが真なら、次のサイクルの最初のアイテムにフラグを立てる
+        drawQueue.push({ 
+            time: nextNoteTime, 
+            phase: schedPhase, 
+            beat: schedBeat, 
+            sub: schedSub, 
+            totalBeats: data.call.length/data.callS,
+            reRender: (needsRender && schedPhase === "CALL" && schedBeat === 0 && schedSub === 0)
+        });
+        
+        // フラグが消費されたら戻す
+        if(needsRender && schedPhase === "CALL" && schedBeat === 0 && schedSub === 0) needsRender = false;
+
+        nextNoteTime += (60 / document.getElementById('bpm-input').value / steps);
+        schedSub++; 
+        if(schedSub >= steps) { schedSub = 0; schedBeat++; }
+        checkPhaseTransition();
+    }
+    timerId = setTimeout(scheduler, 25);
+}
+
+function checkPhaseTransition() {
+    const bType = document.getElementById('beats-num').value;
+    const bNum = bType.includes("1beat") ? 1 : (bType.includes("2beat") ? 2 : (bType.includes("3beat") ? 3 : 4));
+    const total = data.call.length / data.callS;
+    if(schedPhase === "COUNT" && schedBeat >= bNum) { schedBeat = 0; schedPhase = "CALL"; }
+    else if(schedPhase !== "COUNT" && schedBeat >= total) {
+        schedBeat = 0;
+        if(schedPhase === "CALL") schedPhase = "RESPONSE";
+        else if(schedPhase === "RESPONSE") {
+            if(document.getElementById('loop-type').value === "STEP") schedPhase = "ANSWER";
+            else finalizeCycle();
+        } else if(schedPhase === "ANSWER") finalizeCycle();
+    }
+}
+
+function finalizeCycle() {
+    cycleCount++;
+    const gc = document.getElementById('gen-cycle').value;
+    const limit = (gc === "Every") ? 1 : (gc === "2Cycle" ? 2 : (gc === "4Cycle" ? 4 : 999));
+    
+    // データの準備だけ行い、実際の適用(renderGrid)は次の1拍目まで遅延させる
+    if(pendingData) {
+        needsRender = true;
+        cycleCount = 0;
+    } else if(cycleCount >= limit) {
+        generate(); // pendingDataを作成
+        needsRender = true;
+        cycleCount = 0;
+    }
+    schedPhase = "CALL";
+}
+
+function playSound(f, v, t, type) {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(v, t);
+    g.gain.exponentialRampToValueAtTime(0.00001, t + 0.1);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t); o.stop(t + 0.1);
+}
+
+init();
+</script>
+</body>
+</html>
