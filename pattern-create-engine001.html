@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yomikae-kun Engine Tester - Production Build</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f9; color: #333; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { font-size: 1.2rem; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        .control-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; background: #eee; padding: 15px; border-radius: 4px; }
+        label { display: block; font-weight: bold; font-size: 0.8rem; margin-bottom: 5px; }
+        select, button { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+        button { background: #333; color: white; cursor: pointer; border: none; font-weight: bold; }
+        button:hover { background: #555; }
+        .result-area { background: #222; color: #0f0; padding: 20px; border-radius: 4px; font-family: monospace; min-height: 100px; white-space: pre-wrap; overflow-x: auto; }
+        .visual-row { margin-bottom: 5px; border-left: 3px solid #0f0; padding-left: 10px; }
+        .meta-info { color: #888; font-size: 0.75rem; margin-bottom: 10px; }
+        .note-block { display: inline-block; width: 12px; height: 12px; margin-right: 2px; border-radius: 2px; }
+        .note-1 { background: #0f0; }
+        .note-0 { background: #444; }
+        .note-n { background: transparent; border: 1px dashed #666; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>studio ritMOnkey Engine Tester</h1>
+    
+    <div class="control-panel">
+        <div>
+            <label>Division</label>
+            <select id="division">
+                <option value="16">16分音符 (Division 16)</option>
+                <option value="12">3連符 (Division 12)</option>
+            </select>
+        </div>
+        <div>
+            <label>Beats (Structure)</label>
+            <select id="beatsKey">
+                <option value="1beat">1beat</option>
+                <option value="1beat(res)">1beat(res)</option>
+                <option value="2beat">2beat</option>
+                <option value="2beat(res)">2beat(res)</option>
+                <option value="3beat">3beat</option>
+                <option value="4beat">4beat</option>
+            </select>
+        </div>
+        <div>
+            <label>Difficulty</label>
+            <select id="difficulty">
+                <option value="Easy">Easy</option>
+                <option value="Normal">Normal</option>
+                <option value="Hard">Hard</option>
+                <option value="Expert">Expert</option>
+                <option value="Randum">Randum</option>
+            </select>
+        </div>
+        <div>
+            <label>Force On Beat (拍頭アクセント)</label>
+            <select id="forceOnBeat">
+                <option value="false">OFF</option>
+                <option value="true">ON</option>
+            </select>
+        </div>
+        <div style="grid-column: span 2;">
+            <button onclick="runGenerate()">GENERATE UNIT</button>
+        </div>
+        <div style="grid-column: span 2;">
+            <button style="background:#55acee" onclick="runInvert()">INVERT LAST RESULT</button>
+        </div>
+    </div>
+
+    <div class="meta-info" id="metaDisplay">条件を選択してGenerateを押してください</div>
+    <div class="result-area" id="resultDisplay"></div>
+</div>
+
+<script>
+/** 
+ * ==========================================
+ * CORE ENGINE DATA - DO NOT REMOVE
+ * ==========================================
+ */
+const NOTE_POOLS = {
+  16: [[0,0,0,0],[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1],[1,1,0,0],[1,0,1,0],[1,0,0,1],[0,1,1,0],[0,1,0,1],[0,0,1,1],[1,1,1,0],[1,1,0,1],[1,0,1,1],[0,1,1,1],[1,1,1,1]],
+  12: [[0,0,0],[1,0,0],[0,1,0],[0,0,1],[1,1,0],[1,0,1],[0,1,1],[1,1,1]]
+};
+
+const STRUCTURE_TEMPLATES = {
+  "1beat": { "Easy": [["a"]] },
+  "1beat(res)": { "Easy": [["a", "n"]] },
+  "2beat": { "Easy": [["a", "a"]], "Normal": [["a", "b"]] },
+  "2beat(res)": { "Easy": [["a", "a", "n", "n"]], "Normal": [["a", "b", "n", "n"]] },
+  "3beat": { 
+    "Easy": [["a", "a", "a"]], 
+    "Normal": [["a", "a", "b"], ["a", "b", "a"], ["b", "a", "a"]], 
+    "Hard": [["a", "b", "c"]], 
+    "Randum": [["rnd", "rnd", "rnd"]] 
+  },
+  "4beat": { 
+    "Easy": [["a", "a", "a", "a"]], 
+    "Normal": [["a", "a", "a", "b"], ["a", "a", "b", "a"], ["a", "b", "a", "a"], ["b", "a", "a", "a"], ["a", "b", "a", "b"], ["a", "b", "b", "a"], ["a", "a", "b", "b"]], 
+    "Hard": [
+        ["a", "a", "b", "c"], ["a", "b", "a", "c"], ["a", "b", "c", "a"], 
+        ["b", "a", "a", "c"], ["b", "a", "c", "a"], ["b", "c", "a", "a"], 
+        ["b", "b", "a", "c"], ["b", "a", "b", "c"], ["a", "b", "b", "c"], 
+        ["c", "c", "a", "b"], ["c", "a", "c", "b"], ["a", "c", "c", "b"]
+    ], 
+    "Expert": [["a", "b", "c", "d"]], 
+    "Randum": [["rnd", "rnd", "rnd", "rnd"]] 
+  }
+};
+
+/**
+ * ==========================================
+ * CORE FUNCTIONS - DO NOT MODIFY
+ * ==========================================
+ */
+function getNotePool(division) { return NOTE_POOLS[division] || NOTE_POOLS[16]; }
+
+function invertPattern(patterns) {
+  return patterns.map(p => {
+    if (p === "n") return "n";
+    return p.map(val => (val === 1 ? 0 : 1));
+  });
+}
+
+function generateUnit(division, beatsKey, difficulty, forceOnBeat) {
+  const pool = getNotePool(division);
+  const templates = STRUCTURE_TEMPLATES[beatsKey][difficulty];
+  let finalPatterns = [];
+  let isAllSilence = true;
+  
+  while (isAllSilence) {
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    const library = {};
+    finalPatterns = [];
+    
+    template.forEach((symbol) => {
+      if (symbol === "n") { 
+        finalPatterns.push("n"); 
+      } else if (symbol === "rnd") { 
+        finalPatterns.push(pool[Math.floor(Math.random() * pool.length)]); 
+      } else {
+        if (!library[symbol]) {
+          let candidate; let isValid = false;
+          while (!isValid) {
+            candidate = pool[Math.floor(Math.random() * pool.length)];
+            const isDup = Object.values(library).some(e => JSON.stringify(e) === JSON.stringify(candidate));
+            const isBeatOk = !forceOnBeat || candidate[0] === 1;
+            if (!isDup && isBeatOk) isValid = true;
+          }
+          library[symbol] = candidate;
+        }
+        finalPatterns.push(library[symbol]);
+      }
+    });
+    // バリデーション: 数値配列のいずれかに 1 が含まれているか
+    isAllSilence = !finalPatterns.some(p => Array.isArray(p) && p.includes(1));
+  }
+  return { patterns: finalPatterns, division, beatsKey, difficulty, forceOnBeat };
+}
+
+/**
+ * ==========================================
+ * UI LOGIC - DISPLAY AND TEST
+ * ==========================================
+ */
+let lastResult = null;
+
+function display(result) {
+    const displayArea = document.getElementById('resultDisplay');
+    const metaArea = document.getElementById('metaDisplay');
+    
+    metaArea.innerText = `Division: ${result.division} | Beats: ${result.beatsKey} | Diff: ${result.difficulty} | ForceBeat: ${result.forceOnBeat}`;
+    displayArea.innerHTML = "";
+
+    result.patterns.forEach((p, index) => {
+        const row = document.createElement('div');
+        row.className = 'visual-row';
+        
+        let visual = "";
+        let raw = "";
+        
+        if (p === "n") {
+            visual = "<span class='note-block note-n'></span>".repeat(result.division === 16 ? 4 : 3);
+            raw = "[ n ] (Fixed Rest)";
+        } else {
+            p.forEach(val => {
+                visual += `<span class='note-block note-${val}'></span>`;
+            });
+            raw = `[ ${p.join(',')} ]`;
+        }
+        
+        row.innerHTML = `<span style="color:#888">${index + 1}: </span>${raw}  ${visual}`;
+        displayArea.appendChild(row);
+    });
+    
+    lastResult = result;
+}
+
+function runGenerate() {
+    const div = parseInt(document.getElementById('division').value);
+    const bKey = document.getElementById('beatsKey').value;
+    const diff = document.getElementById('difficulty').value;
+    const fob = document.getElementById('forceOnBeat').value === "true";
+    
+    const res = generateUnit(div, bKey, diff, fob);
+    display(res);
+}
+
+function runInvert() {
+    if (!lastResult) return alert("先にGenerateしてください");
+    const inverted = invertPattern(lastResult.patterns);
+    const newRes = { ...lastResult, patterns: inverted, difficulty: lastResult.difficulty + " (Inverted)" };
+    display(newRes);
+}
+</script>
+</body>
+</html>
