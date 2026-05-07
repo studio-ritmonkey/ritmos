@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>studio ritMOnkey v18.4.2</title>
+    <style>
+        body { margin: 0; padding: 10px; background: #121212; color: #eee; font-family: sans-serif; -webkit-text-size-adjust: 100%; }
+        .rmp-wrapper { width: 100%; max-width: 740px; margin: auto; }
+        .container { background: #1e1e1e; padding: 15px; border-radius: 12px; border: 1px solid #333; box-sizing: border-box; }
+        /* 状態バーの高さを20%削減 */
+        #status { font-size: 1.4rem; font-weight: 900; margin-bottom: 15px; padding: 10px; border-radius: 8px; text-align: center; min-height: 27px; letter-spacing: 1px; line-height: 27px; }
+        .mode-ready { background: #555; color: #fff; }
+        .mode-call { background: #0051ff; color: #fff; } 
+        .mode-response { background: #ff9800; color: #000; }
+        .mode-answer { background: #00c853; color: #fff; } 
+        .mode-rest { background: #333; color: #666; }
+        .display-area { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+        .row-label { font-weight: bold; color: #aaa; margin-bottom: 4px; font-size: 0.8rem; display: flex; justify-content: space-between; }
+        .grid { display: flex !important; flex-wrap: wrap; gap: 6px; background: #181818; padding: 10px; border-radius: 8px; border: 1px solid #252525; box-sizing: border-box; width: 100%; min-height: 85px; align-items: center; }
+        .bar-break { display: none; flex-basis: 100%; height: 0; }
+        .bar-line { width: 4px; height: 50px; background: #444; margin: 0 2px; border-radius: 2px; flex-shrink: 0; }
+        .beat-box { width: 76px; height: 58px; padding: 4px; background: #222; border-radius: 6px; border: 2px solid #333; display: flex !important; flex-direction: column; justify-content: center; align-items: center; gap: 2px; box-sizing: border-box; transition: 0.1s; position: relative; }
+        .beat-box.active { border-color: #fff; background: #2a2a2a; }
+        .sub-grid { display: flex !important; justify-content: center; align-items: center; gap: 2px; height: 18px; }
+        .cell { width: 12px; height: 12px; border-radius: 2px; background: #333; }
+        .cell.on { background: #fff; box-shadow: 0 0 5px #fff; }
+        .under-bars { display: flex; justify-content: center; gap: 2px; width: 100%; }
+        .u-line { height: 3px; background: #444; border-radius: 1px; flex: 1; max-width: 12px; }
+        .action-bar { display: grid; grid-template-columns: 1fr 80px; gap: 10px; margin-bottom: 20px; }
+        /* スタートバーの高さを20%削減 */
+        #startBtn { padding: 14px; font-size: 1.2rem; font-weight: bold; background: #00c853; border: none; color: white; border-radius: 8px; cursor: pointer; }
+        #startBtn.stop { background: #ff1744; }
+        #refreshBtn { padding: 14px; background: #512da8; border: none; color: white; border-radius: 8px; cursor: pointer; font-size: 1.5rem; }
+        .controls-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+        .control-group { background: #252525; padding: 8px; border-radius: 6px; border: 1px solid #333; display: flex; flex-direction: column; }
+        label { display: block; font-size: 0.6rem; color: #888; margin-bottom: 4px; font-weight: bold; text-transform: uppercase; }
+        select, input { width: 100%; padding: 7px; background: #333; border: 1px solid #444; color: white; border-radius: 4px; font-size: 0.8rem; outline: none; box-sizing: border-box; }
+        #bpm { width: 60px; text-align: center; }
+        .sound-panel { display: flex; gap: 2px; background: #111; padding: 2px; border-radius: 4px; }
+        .sound-btn { flex: 1; padding: 6px 0; font-size: 0.6rem; background: #333; border: none; color: #888; cursor: pointer; font-weight: bold; }
+        .sound-btn.active { background: #512da8; color: white; }
+        @media (max-width: 730px) { .bar-break { display: block; } .bar-line { display: none; } .controls-grid { grid-template-columns: repeat(2, 1fr); } .action-bar { grid-template-columns: 1fr 65px; } }
+        .credit { text-align: center; margin-top: 20px; color: #444; font-size: 0.7rem; font-weight: bold; }
+    </style>
+</head>
+<body>
+<div class="rmp-wrapper">
+    <div class="container">
+        <div id="status" class="mode-rest">READY</div>
+        <div class="display-area">
+            <div><div class="row-label"><span>CALL</span></div><div id="grid-call" class="grid"></div></div>
+            <div><div class="row-label"><span>RESPONSE</span></div><div id="grid-res" class="grid"></div></div>
+        </div>
+        <div class="action-bar">
+            <button id="startBtn">START SESSION</button>
+            <button id="refreshBtn">↻</button>
+        </div>
+
+        <!-- 診断パネル（前回の仕様を維持） -->
+        <div id="debug-panel" style="margin-bottom: 15px; padding: 10px; font-size: 0.7rem; background: #252525; border-radius: 8px; border: 1px solid #333; color: #888;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                <span>SYSTEM DIAGNOSIS (READ-ONLY)</span>
+                <button id="check-status-btn" style="padding: 2px 8px; background: #444; border: none; color: #ccc; border-radius: 4px; font-size: 0.6rem;">RUN DIAGNOSIS</button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; text-align: left;">
+                <div>STATE: <span id="st-audio" style="color: #eee;">-</span></div>
+                <div>VISIBILITY: <span id="st-vis" style="color: #eee;">-</span></div>
+                <div>SAMPLE RATE: <span id="st-rate" style="color: #eee;">-</span></div>
+                <div>CLOCK: <span id="st-time" style="color: #eee;">-</span></div>
+            </div>
+        </div>
+
+        <div class="controls-grid">
+            <div class="control-group"><label>Beats</label><select id="beats-num">
+                <option value="1-rest">1beat(w/r)</option><option value="1">1beat</option>
+                <option value="2-rest">2beat(w/r)</option><option value="2">2beat</option>
+                <option value="3">3beat</option><option value="4" selected>4beat</option>
+            </select></div>
+            <div class="control-group"><label>Bar Rule</label><select id="bar-rule">
+                <option value="1bar" selected>1bar</option><option value="2bar Repeat">2bar Repeat</option>
+                <option value="2bar Shuffle">2bar Shuffle</option><option value="2bar Parallel">2bar Parallel</option>
+                <option value="2bar Variation">2bar Variation</option><option value="2bar Mystery">2bar Mystery</option>
+            </select></div>
+            <div class="control-group"><label>Loop Type</label><select id="loop-type">
+                <option value="LOOP">LOOP (C/R)</option><option value="STEP" selected>STEP (C/R/A)</option><option value="TRY">TRY (C/R)</option>
+            </select></div>
+            <div class="control-group"><label>Training Mode</label><select id="visual-mode">
+                <option value="FULL OPEN">FULL OPEN</option><option value="GUIDE">GUIDE</option>
+                <option value="STANDARD" selected>STANDARD</option><option value="ECHO">ECHO</option>
+                <option value="FLASH">FLASH</option><option value="TRACING">TRACING</option>
+                <option value="GHOST">GHOST</option><option value="BLIND">BLIND</option>
+            </select></div>
+        </div>
+        <div class="controls-grid">
+            <div class="control-group"><label>Difficulty</label><select id="diff-select"></select></div>
+            <div class="control-group"><label>Conversion</label><select id="conv-rule">
+                <option value="16to3" selected>16th → 3let</option><option value="3to16">3let → 16th</option>
+            </select></div>
+            <div class="control-group"><label>Tempo</label><input type="number" id="bpm" value="90"></div>
+            <div class="control-group">
+                <label>Sound</label>
+                <div class="sound-panel">
+                    <button class="sound-btn" data-type="OFF">OFF</button>
+                    <button class="sound-btn" data-type="A">SET A</button>
+                    <button class="sound-btn" data-type="B">SET B</button>
+                    <button class="sound-btn active" data-type="C">SET C</button>
+                </div>
+            </div>
+        </div>
+        <div class="credit">studio ritMOnkey by ARTHAND v18.4.2</div>
+    </div>
+</div>
+
+<script>
+(function() {
+    let audioCtx = null, isPlaying = false, nextNoteTime = 0, currentBeat = 0, cyclePhase = 'READY', timerID = null;
+    let currentScheme = [], currentPats = {}, uiQueue = [], refreshPending = false, soundType = 'C';
+
+    const DIFF_MAP = {
+        "1-rest": [{l:"Easy", v:"a_null"}], "1": [{l:"Easy", v:"a"}],
+        "2-rest": [{l:"Easy", v:"aa_null_null"}, {l:"Normal", v:"ab_null_null"}],
+        "2": [{l:"Easy", v:"aa"}, {l:"Normal", v:"ab"}],
+        "3": [{l:"Easy", v:"aaa"}, {l:"Normal", v:"aab,aba"}, {l:"Hard", v:"abc,rnd"}],
+        "4": [{l:"Easy", v:"aaaa"}, {l:"Normal", v:"aaab,aabb,abab"}, {l:"Hard", v:"aabc,abcc", selected:true}, {l:"Expert", v:"abcd,rnd"}]
+    };
+
+    const VIS_RULES = {
+        "FULL OPEN": { c: ["O","O"], r: ["O","O"] }, "GUIDE": { c: ["O","X"], r: ["O","G"] },
+        "STANDARD": { c: ["O","X"], r: ["O","X"] }, "ECHO": { c: ["O","X"], r: ["X","G"] },
+        "FLASH": { c: ["G","X"], r: ["X","G"] }, "TRACING": { c: ["X","G"], r: ["X","X"] },
+        "GHOST": { c: ["G","X"], r: ["X","X"] }, "BLIND": { c: ["X","X"], r: ["X","X"] }
+    };
+
+    function updateDiffs() {
+        const b = document.getElementById('beats-num').value, s = document.getElementById('diff-select');
+        if(!s) return; s.innerHTML = '';
+        (DIFF_MAP[b] || []).forEach(o => { 
+            const opt = document.createElement('option'); opt.value = o.v; opt.textContent = o.l; 
+            if(o.selected) opt.selected = true;
+            s.appendChild(opt); 
+        });
+        initGrids();
+    }
+
+    function initGrids() {
+        const bVal = document.getElementById('beats-num').value;
+        const b = (bVal.startsWith("3")) ? 3 : (bVal === "1" ? 1 : (bVal === "1-rest" || bVal === "2" ? 2 : 4));
+        const rule = document.getElementById('bar-rule').value, conv = document.getElementById('conv-rule').value;
+        const gc = document.getElementById('grid-call'), gr = document.getElementById('grid-res');
+        if(!gc || !gr) return;
+        let total = (rule.startsWith("2bar")) ? b * 2 : b;
+        if (bVal === "1-rest") total = 2; if (bVal === "2-rest") total = 4;
+        gc.innerHTML = ''; gr.innerHTML = '';
+        for(let i=0; i<total; i++) {
+            if (rule.startsWith("2bar") && i === b) { 
+                gc.insertAdjacentHTML('beforeend', '<div class="bar-break"></div><div class="bar-line"></div>');
+                gr.insertAdjacentHTML('beforeend', '<div class="bar-break"></div><div class="bar-line"></div>');
+            }
+            gc.insertAdjacentHTML('beforeend', createBox('c', i, conv === '16to3' ? 4 : 3));
+            gr.insertAdjacentHTML('beforeend', createBox('r', i, conv === '16to3' ? 3 : 4));
+        }
+    }
+
+    function createBox(p, i, sub) {
+        let u = ''; for(let j=0; j<sub; j++) u += '<div class="u-line"></div>';
+        return `<div class="beat-box" id="${p}-b-${i}"><div class="sub-grid" id="${p}-s-${i}"></div><div class="under-bars">${u}</div></div>`;
+    }
+
+    function generateSet(keys, sub, forceA) {
+        const set = {};
+        keys.forEach(k => {
+            let p, attempts = 0;
+            while (attempts < 100) {
+                attempts++;
+                p = Array.from({length: sub}, () => Math.random() > 0.65 ? 1 : 0);
+                if (k === 'a' && forceA && p.every(v => v === 0)) continue;
+                if (!Object.values(set).some(ex => ex.join("") === p.join("")) || attempts > 50) break;
+            }
+            set[k] = p;
+        });
+        return set;
+    }
+
+    function getNewData() {
+        const bVal = document.getElementById('beats-num').value, diff = document.getElementById('diff-select').value;
+        const rule = document.getElementById('bar-rule').value, sub = document.getElementById('conv-rule').value === '16to3' ? 4 : 3;
+        const set1 = generateSet("abcd".split(""), sub, (diff.startsWith("a"))), set2 = generateSet("efgh".split(""), sub, false);
+        const pats = {...set1, ...set2, "null": Array(sub).fill(0)};
+        let u1 = (diff === "rnd" ? "abcd".split("").slice(0, 4) : diff.split(",")[0].split(""));
+        if (bVal === "1-rest") u1 = ["a", "null"]; if (bVal === "2-rest") u1 = (diff.startsWith("aa")) ? ["a","a","null","null"] : ["a","b","null","null"];
+        let u2 = [];
+        if (rule.startsWith("2bar")) {
+            const m = rule.split(" ")[1];
+            if (m === "Repeat") u2 = [...u1];
+            else if (m === "Shuffle") { let sA=0; do { u2 = [...u1].sort(() => Math.random() - 0.5); sA++; } while (u1.join("") === u2.join("") && sA < 10); }
+            else if (m === "Parallel") { u2 = u1.map(k => ({"a":"e","b":"f","c":"g","d":"h","null":"null"}[k])); }
+            else { u2 = "efgh".split("").slice(0, u1.length); }
+        }
+        return { scheme: u1.concat(u2), pats };
+    }
+
+    function play(t, f, v, type) {
+        if(!audioCtx || v <= 0) return;
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        if (soundType === 'B') { o.type = (type === 'call') ? 'triangle' : (type === 'guide' ? 'sine' : 'square'); }
+        else { o.type = 'sine'; }
+        o.frequency.setValueAtTime(f, t);
+        g.gain.setTargetAtTime(v, t, 0.005);
+        g.gain.setTargetAtTime(0.001, t + 0.05, 0.01);
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(t); o.stop(t + 0.15);
+    }
+
+    function scheduler() {
+        if (!isPlaying) return;
+        while (nextNoteTime < audioCtx.currentTime + 0.1) {
+            runLogic(nextNoteTime);
+            nextNoteTime += 60.0 / (parseInt(document.getElementById('bpm').value) || 90);
+        }
+        timerID = setTimeout(scheduler, 25);
+    }
+
+    function runLogic(t) {
+        const bpm = parseInt(document.getElementById('bpm').value) || 90, bVal = document.getElementById('beats-num').value;
+        const b = (bVal.startsWith("3")) ? 3 : (bVal === "1" ? 1 : (bVal === "1-rest" || bVal === "2" ? 2 : 4));
+        const loop = document.getElementById('loop-type').value, is16 = document.getElementById('conv-rule').value === '16to3';
+
+        if (cyclePhase === 'READY') { currentBeat = 0; cyclePhase = 'COUNT'; }
+
+        // ガイド発音ロジック（SET C優先）
+        if (cyclePhase === 'READY' || cyclePhase === 'COUNT' || cyclePhase === 'CALL' || cyclePhase === 'RESPONSE' || cyclePhase === 'ANSWER') {
+            if (soundType === 'C') {
+                const sub = (cyclePhase === 'READY' || cyclePhase === 'COUNT' || cyclePhase === 'CALL') ? (is16 ? 4 : 3) : (is16 ? 3 : 4);
+                const step = (60.0 / bpm) / sub;
+                for(let i=0; i<sub; i++) {
+                    const isHead = (i === 0);
+                    const f = isHead ? 2000 : 400;
+                    const vol = isHead ? 0.015 : 0.0005; // パラメータ 0.0005 固定
+                    play(t + (i * step), f, vol, 'guide');
+                }
+            } else if (soundType !== 'OFF') {
+                // SET A, B の READY/COUNT の 1 拍目も 2000Hz に統一
+                play(t, 2000, 0.02, 'guide');
+            }
+
+            if (cyclePhase === 'COUNT') {
+                uiQueue.push({ t, phase: 'COUNT', beat: currentBeat, scheme: [], pats: {} });
+                currentBeat++; 
+                if(currentBeat >= b) { currentBeat = 0; cyclePhase = 'CALL'; const res = getNewData(); currentScheme = res.scheme; currentPats = res.pats; }
+                return;
+            }
+        }
+
+        uiQueue.push({ t, phase: cyclePhase, beat: currentBeat, scheme: [...currentScheme], pats: {...currentPats} });
+        
+        const data = currentPats[currentScheme[currentBeat]]; if(!data) return;
+        const step = (60.0 / bpm) / data.length;
+        const resData = is16 ? [data[0], (data[1]||data[2])?1:0, data[3]] : [data[0], 0, data[1], data[2]];
+
+        if (cyclePhase === 'CALL') { data.forEach((on, i) => { if(on) play(t + (i * step), 880, 0.15, 'call'); }); }
+        else if (cyclePhase === 'RESPONSE' && loop === 'LOOP') { const s2 = (60.0/bpm)/resData.length; resData.forEach((on, i) => { if(on) play(t + (i*s2), 440, 0.15, 'answer'); }); }
+        else if (cyclePhase === 'ANSWER') { const s2 = (60.0/bpm)/resData.length; resData.forEach((on, i) => { if(on) play(t + (i*s2), 440, 0.15, 'answer'); }); }
+
+        currentBeat++;
+        if (currentBeat >= currentScheme.length) {
+            currentBeat = 0;
+            if (cyclePhase === 'CALL') cyclePhase = 'RESPONSE';
+            else if (cyclePhase === 'RESPONSE') {
+                if (loop !== 'STEP') { cyclePhase = 'CALL'; if(refreshPending) { const res = getNewData(); currentScheme = res.scheme; currentPats = res.pats; refreshPending = false; } }
+                else cyclePhase = 'ANSWER';
+            } else { 
+                cyclePhase = 'CALL'; if(refreshPending) { const res = getNewData(); currentScheme = res.scheme; currentPats = res.pats; refreshPending = false; }
+            }
+        }
+    }
+
+    function updateUI() {
+        if (!isPlaying) return;
+        while(uiQueue.length > 0 && uiQueue[0].t <= audioCtx.currentTime) {
+            const task = uiQueue.shift(), { phase, beat, scheme, pats } = task, statusEl = document.getElementById('status');
+            const vMode = document.getElementById('visual-mode').value, rules = VIS_RULES[vMode];
+            if (phase === 'COUNT') { statusEl.textContent = `COUNT: ${beat + 1}`; statusEl.className = 'mode-ready'; continue; }
+            statusEl.textContent = `${phase} : ${beat + 1}`; statusEl.className = `mode-${phase.toLowerCase()}`;
+            for(let i=0; i<scheme.length; i++) {
+                const cb = document.getElementById(`c-b-${i}`), rb = document.getElementById(`r-b-${i}`), cs = document.getElementById(`c-s-${i}`), rs = document.getElementById(`r-s-${i}`);
+                if(!cb) continue; cb.classList.toggle('active', i === beat); rb.classList.toggle('active', i === beat);
+                const p = pats[scheme[i]]; if(!p) continue;
+                const is16 = document.getElementById('conv-rule').value === '16to3';
+                const rData = is16 ? [p[0], (p[1]||p[2])?1:0, p[3]] : [p[0], 0, p[1], p[2]];
+                const r = (phase === 'CALL') ? rules.c : (phase === 'RESPONSE' ? rules.r : ["O","O"]);
+                drawCells(cs, p, r[0], i === beat); drawCells(rs, rData, r[1], i === beat);
+            }
+        }
+        requestAnimationFrame(updateUI);
+    }
+
+    function drawCells(el, data, rule, isNow) { el.innerHTML = ''; if (rule === 'X') return; data.forEach((on, i) => { if (rule === 'G' && !isNow) return; const c = document.createElement('div'); c.className = 'cell' + (on ? ' on' : ''); el.appendChild(c); }); }
+    function clearUI() { document.querySelectorAll('.sub-grid').forEach(g => g.innerHTML = ''); document.querySelectorAll('.beat-box').forEach(b => b.classList.remove('active')); }
+
+    // パッチ適用箇所[cite: 8]
+    document.getElementById('startBtn').addEventListener('click', async function() {
+        if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if(audioCtx.state === 'suspended') await audioCtx.resume();
+        
+        if(isPlaying) {
+            isPlaying = false;
+            clearTimeout(timerID);
+            this.textContent = 'START SESSION';
+            this.classList.remove('stop');
+            document.getElementById('status').className = 'mode-rest';
+            document.getElementById('status').textContent = 'STOPPED';
+        } else {
+            clearUI();
+            
+            // スタート時にデータが空、またはリフレッシュ待ちの場合は即座に生成[cite: 8]
+            if (currentScheme.length === 0 || refreshPending) {
+                const res = getNewData();
+                currentScheme = res.scheme;
+                currentPats = res.pats;
+                refreshPending = false;
+                initGrids(); 
+            }
+            
+            isPlaying = true;
+            uiQueue = [];
+            currentBeat = 0;
+            cyclePhase = 'READY';
+            nextNoteTime = audioCtx.currentTime + 0.1;
+            
+            scheduler();
+            updateUI();
+            this.textContent = 'STOP';
+            this.classList.add('stop');
+        }
+    });
+
+    // パッチ適用箇所[cite: 8]
+    document.getElementById('refreshBtn').addEventListener('click', function() {
+        clearUI();
+        refreshPending = true;
+        const res = getNewData();
+        currentScheme = res.scheme;
+        currentPats = res.pats;
+        if(!isPlaying) {
+            initGrids();
+            refreshPending = false; 
+        }
+    });
+
+    // 診断ロジック（前回の仕様を維持）[cite: 6]
+    document.getElementById('check-status-btn').addEventListener('click', () => {
+        const ctx = audioCtx;
+        const stAudio = document.getElementById('st-audio');
+        const stVis = document.getElementById('st-vis');
+        const stRate = document.getElementById('st-rate');
+        const stTime = document.getElementById('st-time');
+        if (!ctx) { stAudio.textContent = "NOT CREATED"; return; }
+        stAudio.textContent = ctx.state;
+        stVis.textContent = document.visibilityState;
+        stRate.textContent = ctx.sampleRate + "Hz";
+        const startTime = ctx.currentTime;
+        stTime.textContent = startTime.toFixed(3) + " (Checking...)";
+        setTimeout(() => {
+            const endTime = ctx.currentTime;
+            if (endTime > startTime) {
+                stTime.textContent = endTime.toFixed(3) + " [ALIVE]";
+                stTime.style.color = "#00c853";
+            } else {
+                stTime.textContent = endTime.toFixed(3) + " [FROZEN]";
+                stTime.style.color = "#ff1744";
+            }
+        }, 100);
+    });
+
+    document.querySelectorAll('.sound-btn').forEach(btn => { btn.addEventListener('click', function() { document.querySelectorAll('.sound-btn').forEach(b => b.classList.remove('active')); this.classList.add('active'); soundType = this.dataset.type; }); });
+    document.getElementById('beats-num').addEventListener('change', updateDiffs);
+    document.getElementById('conv-rule').addEventListener('change', initGrids);
+    document.getElementById('bar-rule').addEventListener('change', initGrids);
+    updateDiffs();
+})();
+</script>
+</body>
+</html>
